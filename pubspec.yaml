@@ -49,6 +49,7 @@ dependencies:
   url_launcher: ^6.2.6
 
 dev_dependencies:
+  flutter_launcher_icons: "^0.14.4"
   flutter_test:
     sdk: flutter
 
@@ -59,11 +60,18 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
 
+flutter_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/cartera.png"
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter packages.
 flutter:
+  assets:
+    - assets/cartera.png
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
