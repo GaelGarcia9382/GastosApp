@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gastos/constants/app_colors.dart';
 import 'package:gastos/screens/categories/categories_screen.dart';
-// ➡️ Importa ambos States
 import 'package:gastos/screens/history/history_screen.dart';
 import 'package:gastos/screens/home/home_screen.dart';
 import 'package:gastos/screens/new_expense/new_expense_screen.dart';
@@ -14,37 +13,45 @@ class MainNavigationScreen extends StatefulWidget {
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
 
-// ➡️ HACEMOS EL ESTADO PÚBLICO
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _selectedIndex = 0;
 
-  // 1. DEFINIR LAS GLOBAL KEYS
+  // ✅ SOLO las 2 GlobalKeys originales (como en tu versión que funcionaba)
   final GlobalKey<HistoryScreenState> _historyKey = GlobalKey<HistoryScreenState>();
   final GlobalKey<HomeScreenState> _homeKey = GlobalKey<HomeScreenState>();
 
-  // 2. DEFINICIÓN DE LA LISTA DE PANTALLAS
   late List<Widget> _widgetOptions;
 
   @override
   void initState() {
     super.initState();
-    // 3. INICIALIZAMOS LA LISTA EN initState PARA PASAR CALLBACKS
+    _initializeScreens();
+  }
+
+  void _initializeScreens() {
     _widgetOptions = <Widget>[
       // HOME SCREEN
       HomeScreen(key: _homeKey),
 
-      // HISTORY SCREEN - ➡️ PASAMOS EL CALLBACK
+      // HISTORY SCREEN
       HistoryScreen(
         key: _historyKey,
-        onExpenseChanged: () {
-          // Cuando un gasto se elimina en HistoryScreen, llamamos a refreshHome
-          _homeKey.currentState?.refreshHome();
-        },
+        onExpenseChanged: _globalRefresh,
       ),
 
+      // CATEGORIES SCREEN - sin cambios
       const CategoriesScreen(),
-      const SettingsScreen(),
+
+      // ✅ SETTINGS SCREEN - CON EL CALLBACK CORRECTO
+      SettingsScreen(
+        onSettingsChanged: _globalRefresh, // ← Esto es lo que faltaba
+      ),
     ];
+  }
+
+  void _globalRefresh() {
+    _homeKey.currentState?.refreshHome();
+    _historyKey.currentState?.refreshHistory();
   }
 
   void _onItemTapped(int index) {
@@ -53,7 +60,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     });
   }
 
-  // FUNCIÓN ASÍNCRONA QUE MANEJA EL MODAL Y EL REFRESCO
   void _onAddExpenseTapped() async {
     final bool? shouldRefresh = await showModalBottomSheet(
       context: context,
@@ -80,15 +86,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       },
     );
 
-    // ➡️ COMPROBAR Y FORZAR EL REFRESCO SIN CAMBIAR DE PESTAÑA
     if (shouldRefresh == true) {
-      // Refresca la pantalla de HOME
-      _homeKey.currentState?.refreshHome();
-
-      // Refresca la pantalla de HISTORIAL
-      _historyKey.currentState?.refreshHistory();
-
-      // El usuario permanece en la pestaña actual (Solución a tu último punto)
+      _globalRefresh();
     }
   }
 
@@ -116,7 +115,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: <Widget>[
-              // Espaciador para la izquierda
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -124,7 +122,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   _buildNavItem(Icons.history, "Historial", 1),
                 ],
               ),
-              // Espaciador para la derecha
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

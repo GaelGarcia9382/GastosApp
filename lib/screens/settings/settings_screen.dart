@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:gastos/constants/app_colors.dart';
+// ➡️ Importaciones de Lógica
+import 'package:gastos/data/settings_storage_service.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  final Function? onSettingsChanged;
+
+  const SettingsScreen({super.key, this.onSettingsChanged});
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  // ➡️ CLASE DE ESTADO PÚBLICA
+  State<SettingsScreen> createState() => SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
-  bool _isDarkMode = true; // Basado en tu diseño que dice "Oscuro"
+class SettingsScreenState extends State<SettingsScreen> {
+  // Servicio de configuración
+  final SettingsStorageService _settingsService = SettingsStorageService();
+
+  bool _isDarkMode = true;
   String _selectedCurrency = "\$ Peso Mexicano (MXN)";
   final List<String> _currencies = [
     "\$ Dólar (USD)",
@@ -19,7 +27,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
     "\$ Peso Colombiano (COP)",
     "\$ Peso Chileno (CLP)",
   ];
-  final TextEditingController _budgetController = TextEditingController(text: "1000");
+  final TextEditingController _budgetController = TextEditingController();
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBudget();
+  }
+
+  void _loadBudget() async {
+    final budget = await _settingsService.getMonthlyBudget();
+    _budgetController.text = budget.toStringAsFixed(2);
+  }
+
+  void _saveBudget() async {
+    if (_isSaving) return;
+
+    final text = _budgetController.text.replaceAll(',', '.');
+    final double? newBudget = double.tryParse(text);
+
+    if (newBudget == null || newBudget < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor, ingresa un presupuesto válido y positivo.'), backgroundColor: AppColors.red),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    await _settingsService.setMonthlyBudget(newBudget);
+
+    widget.onSettingsChanged?.call();
+
+    setState(() {
+      _isSaving = false;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Presupuesto guardado en \$${newBudget.toStringAsFixed(2)}.'), backgroundColor: AppColors.green),
+    );
+  }
 
   @override
   void dispose() {
@@ -36,10 +86,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SizedBox(width: 10),
         ],
       ),
-      body: Stack( // Envolver con Stack
+      body: Stack(
         children: [
           SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100), // Padding inferior
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
             child: Column(
               children: [
                 _buildThemeOption(),
@@ -59,6 +109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // ➡️ WIDGET 1: Restaurado completamente
   Widget _buildThemeOption() {
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -71,13 +122,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           setState(() {
             _isDarkMode = value;
           });
-          // Aquí iría la lógica para cambiar el tema de la app
+          // Lógica para cambiar el tema
         },
         activeColor: AppColors.accentBrown,
       ),
     );
   }
 
+  // ➡️ WIDGET 2: Restaurado completamente
   Widget _buildCurrencyOption() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -118,6 +170,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // WIDGET 3: _buildBudgetOption (Actualizado con botón de guardado)
   Widget _buildBudgetOption() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -143,10 +196,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ),
+
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _isSaving ? null : _saveBudget,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accentBrown,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: _isSaving
+                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Text("Guardar Presupuesto", style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w600)),
+          ),
+        ),
       ],
     );
   }
 
+  // ➡️ WIDGET 4: Restaurado completamente
   Widget _buildSerenityTip() {
     return Card(
       child: Padding(
@@ -172,6 +242,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // ➡️ WIDGET 5: Restaurado completamente
   Widget _buildAppInfo() {
     return Column(
       children: [
