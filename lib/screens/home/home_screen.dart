@@ -2,7 +2,6 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:gastos/constants/app_colors.dart';
-import 'package:gastos/widgets/common/help_button.dart';
 import 'package:gastos/data/gasto.dart';
 import 'package:gastos/data/gasto_storage_service.dart';
 
@@ -197,12 +196,6 @@ class HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-          ),
-          // Botón de Ayuda Flotante
-          const Positioned(
-            bottom: 80,
-            right: 16,
-            child: HelpButton(),
           ),
         ],
       ),

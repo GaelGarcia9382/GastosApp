@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:gastos/constants/app_colors.dart';
-import 'package:gastos/widgets/common/help_button.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -54,12 +53,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _buildAppInfo(),
               ],
             ),
-          ),
-          // Botón de Ayuda Flotante
-          const Positioned(
-            bottom: 80, // Por encima de la barra de navegación
-            right: 16,
-            child: HelpButton(),
           ),
         ],
       ),
