@@ -3,24 +3,94 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:gastos/constants/app_colors.dart';
 import 'package:gastos/widgets/common/help_button.dart';
+import 'package:gastos/data/gasto.dart';
+import 'package:gastos/data/gasto_storage_service.dart';
 
-class HomeScreen extends StatelessWidget {
+const double _presupuestoMensual = 1000.00;
+
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // Formateador para la fecha
-    final String monthYear =
-    DateFormat.yMMMM('es_ES').format(DateTime(2025, 11));
+  // ➡️ HACEMOS EL ESTADO PÚBLICO
+  State<HomeScreen> createState() => HomeScreenState();
+}
 
-    // Datos de ejemplo
-    double totalGastado = 120.00;
-    double presupuesto = 1000.00;
-    double disponible = presupuesto - totalGastado;
-    double porcentajeGastado = totalGastado / presupuesto;
+class HomeScreenState extends State<HomeScreen> {
+  final GastoStorageService _storageService = GastoStorageService();
+  late Future<List<Gasto>> _gastosFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadGastos();
+  }
+
+  // ➡️ MÉTODO PÚBLICO PARA SER LLAMADO DESDE MAINNAVIGATIONSCREEN
+  void refreshHome() {
+    _loadGastos();
+  }
+
+  void _loadGastos() {
+    setState(() {
+      _gastosFuture = _storageService.getGastos();
+    });
+  }
+
+  Map<String, dynamic> _calculateStats(List<Gasto> expenses) {
+    if (expenses.isEmpty) {
+      return {
+        'totalGastado': 0.0,
+        'categorias': [],
+        'presupuesto': _presupuestoMensual,
+      };
+    }
+
+    double totalGastado = 0.0;
+    final Map<String, double> categorias = {};
+
+    for (var expense in expenses) {
+      totalGastado += expense.cantidad;
+      categorias.update(
+        expense.categoria,
+            (value) => value + expense.cantidad,
+        ifAbsent: () => expense.cantidad,
+      );
+    }
+
+    final List<Map<String, dynamic>> categoriasList = categorias.entries.map((entry) {
+      final double monto = entry.value;
+      return {
+        'nombre': entry.key,
+        'monto': monto,
+        'porcentaje': monto / totalGastado,
+      };
+    }).toList();
+
+    categoriasList.sort((a, b) => b['monto'].compareTo(a['monto']));
+
+    return {
+      'totalGastado': totalGastado,
+      'categorias': categoriasList,
+      'presupuesto': _presupuestoMensual,
+    };
+  }
+
+  final Map<String, Map<String, dynamic>> _categoryVisuals = {
+    'Alimentación': {'icon': Icons.restaurant, 'color': AppColors.red},
+    'Transporte': {'icon': Icons.directions_car, 'color': AppColors.blue},
+    'Entretenimiento': {'icon': Icons.videogame_asset, 'color': AppColors.purple},
+    'Salud': {'icon': Icons.medical_services, 'color': AppColors.green},
+    'Educación': {'icon': Icons.school, 'color': AppColors.yellow},
+    'Compras': {'icon': Icons.shopping_bag, 'color': AppColors.orange},
+  };
+
+
+  @override
+  Widget build(BuildContext context) {
+    final String monthYear = DateFormat.yMMMM('es_ES').format(DateTime.now());
 
     return Scaffold(
-      // Usamos un Stack para poner el botón de ayuda flotante
       body: Stack(
         children: [
           SafeArea(
@@ -29,18 +99,17 @@ class HomeScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Fila superior con Fecha
+                  // Encabezado
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        monthYear, // "noviembre de 2025"
+                        monthYear,
                         style: const TextStyle(
                           color: AppColors.secondaryText,
                           fontSize: 16,
                         ),
                       ),
-                      // El botón de ayuda ahora es flotante
                     ],
                   ),
                   const Text(
@@ -53,40 +122,85 @@ class HomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 20),
 
-                  // Tarjeta de Resumen de Gastos
-                  _buildSummaryCard(
-                      totalGastado, disponible, presupuesto, porcentajeGastado),
+                  // FutureBuilder para cargar los datos
+                  FutureBuilder<List<Gasto>>(
+                      future: _gastosFuture,
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
 
-                  const SizedBox(height: 30),
-                  const Text(
-                    "Categorías Principales",
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primaryText,
-                    ),
+                        if (snapshot.hasError) {
+                          return const Text("Error al cargar datos.");
+                        }
+
+                        final List<Gasto> expenses = snapshot.data ?? [];
+
+                        // Si no hay datos, mostramos un mensaje centrado
+                        if (expenses.isEmpty) {
+                          return const Center(child: Text("Aún no hay gastos registrados."));
+                        }
+
+                        final stats = _calculateStats(expenses);
+
+                        final double totalGastado = stats['totalGastado'];
+                        final double presupuesto = stats['presupuesto'];
+                        final double disponible = presupuesto - totalGastado;
+                        final double porcentajeGastado = totalGastado / presupuesto;
+                        final List<Map<String, dynamic>> categorias = stats['categorias'];
+
+                        // Devolvemos el resto de los Widgets dentro de un Column
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Tarjeta de Resumen de Gastos
+                            _buildSummaryCard(
+                                totalGastado,
+                                disponible,
+                                presupuesto,
+                                min(porcentajeGastado, 1.0)
+                            ),
+
+                            const SizedBox(height: 30),
+                            const Text(
+                              "Categorías Principales",
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primaryText,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+
+                            // Gráfico (Usar datos dinámicos en el placeholder)
+                            _buildChartPlaceholder(categorias, totalGastado),
+
+                            const SizedBox(height: 30),
+
+                            // Lista de Categorías (Mapeo dinámico)
+                            ...categorias.map((cat) {
+                              final visuals = _categoryVisuals[cat['nombre']] ?? {'icon': Icons.monetization_on, 'color': Colors.grey};
+                              return _buildCategoryItem(
+                                  cat['nombre'],
+                                  cat['monto'],
+                                  cat['porcentaje'],
+                                  visuals['color'],
+                                  visuals['icon']
+                              );
+                            }).toList(),
+
+                            const SizedBox(height: 80),
+                          ],
+                        );
+                      }
                   ),
-                  const SizedBox(height: 20),
-
-                  // Gráfico (Placeholder)
-                  _buildChartPlaceholder(),
-
-                  const SizedBox(height: 30),
-
-                  // Lista de Categorías
-                  _buildCategoryItem("Educación", 100.00, 0.83, AppColors.green,
-                      Icons.school),
-                  _buildCategoryItem("Entretenimiento", 20.00, 0.17,
-                      AppColors.purple, Icons.videogame_asset),
-                  // Padding inferior para que no tape el botón de menú
-                  const SizedBox(height: 80),
                 ],
               ),
             ),
           ),
           // Botón de Ayuda Flotante
           const Positioned(
-            bottom: 80, // Por encima de la barra de navegación
+            bottom: 80,
             right: 16,
             child: HelpButton(),
           ),
@@ -97,6 +211,7 @@ class HomeScreen extends StatelessWidget {
 
   Widget _buildSummaryCard(double totalGastado, double disponible,
       double presupuesto, double porcentaje) {
+    // ... (sin cambios)
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -147,8 +262,35 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildChartPlaceholder() {
-    // Placeholder para el gráfico de dona
+  Widget _buildChartPlaceholder(List<Map<String, dynamic>> categorias, double totalGastado) {
+    // ... (sin cambios)
+    if (totalGastado == 0) {
+      return const Center(child: Text("No hay datos para mostrar en el gráfico."));
+    }
+
+    final List<Color> colors = [];
+    final List<double> stops = [];
+    double currentStop = 0.0;
+
+    for (var cat in categorias) {
+      final double porcentaje = cat['porcentaje'];
+      final Color color = _categoryVisuals[cat['nombre']]?['color'] ?? Colors.grey;
+
+      if (currentStop > 0.0) {
+        colors.add(color);
+        stops.add(currentStop);
+      }
+
+      currentStop += porcentaje;
+      colors.add(color);
+      stops.add(currentStop);
+    }
+
+    if (currentStop < 1.0) {
+      colors.add(Colors.transparent);
+      stops.add(1.0);
+    }
+
     return Center(
       child: Container(
         width: 180,
@@ -161,18 +303,12 @@ class HomeScreen extends StatelessWidget {
           child: Container(
             width: 140,
             height: 140,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
-              // Simulación del gráfico
               gradient: SweepGradient(
-                colors: [
-                  AppColors.green,
-                  AppColors.green,
-                  AppColors.purple,
-                  Colors.transparent,
-                ],
-                stops: [0.0, 0.83, 0.83, 1.0],
-                transform: GradientRotation(-pi / 2), // Empezar desde arriba
+                colors: colors,
+                stops: stops,
+                transform: const GradientRotation(-pi / 2),
               ),
             ),
             child: Center(
@@ -193,6 +329,7 @@ class HomeScreen extends StatelessWidget {
 
   Widget _buildCategoryItem(String nombre, double monto, double porcentaje,
       Color color, IconData icono) {
+    // ... (sin cambios)
     return Card(
       margin: const EdgeInsets.only(bottom: 15),
       child: Padding(

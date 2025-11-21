@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gastos/constants/app_colors.dart';
 import 'package:gastos/screens/categories/categories_screen.dart';
 import 'package:gastos/screens/history/history_screen.dart';
-import 'package:gastos/screens/home/home_screen.dart';
+import 'package:gastos/screens/home/home_screen.dart'; // Importación necesaria
 import 'package:gastos/screens/new_expense/new_expense_screen.dart';
 import 'package:gastos/screens/settings/settings_screen.dart';
 
@@ -16,13 +16,14 @@ class MainNavigationScreen extends StatefulWidget {
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _selectedIndex = 0;
 
-  // ➡️ 1. DEFINIR LA GLOBAL KEY USANDO EL ESTADO PÚBLICO
+  // ➡️ 1. DEFINIR DOS GLOBAL KEYS (HistoryScreenState y HomeScreenState son públicas)
   final GlobalKey<HistoryScreenState> _historyKey = GlobalKey<HistoryScreenState>();
+  final GlobalKey<HomeScreenState> _homeKey = GlobalKey<HomeScreenState>(); // ⬅️ NUEVA KEY
 
   // 2. ASIGNAR LAS PANTALLAS
   late final List<Widget> _widgetOptions = <Widget>[
-    const HomeScreen(),
-    HistoryScreen(key: _historyKey), // ⬅️ Asignar la Key
+    HomeScreen(key: _homeKey), // ⬅️ ASIGNAR KEY A HOME
+    HistoryScreen(key: _historyKey),
     const CategoriesScreen(),
     const SettingsScreen(),
   ];
@@ -33,7 +34,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     });
   }
 
-  // ➡️ 3. FUNCIÓN ASÍNCRONA PARA ABRIR EL MODAL Y REFRESCAR EL HISTORIAL
+  // 3. FUNCIÓN ASÍNCRONA QUE ESPERA EL RESULTADO DEL MODAL
+  // En main_navigation_screen.dart
+
   void _onAddExpenseTapped() async {
     // Abrir el modal y esperar el resultado (será 'true' si se guardó un gasto)
     final bool? shouldRefresh = await showModalBottomSheet(
@@ -50,26 +53,24 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               decoration: const BoxDecoration(
                 color: AppColors.background,
                 borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
               ),
-              child: NewExpenseScreen(scrollController: controller),
+            ),
+            child: NewExpenseScreen(scrollController: controller),
             );
           },
         );
       },
     );
 
-    // ➡️ 4. COMPROBAR EL RESULTADO Y FORZAR EL REFRESCO EN EL HIJO
+    // ➡️ COMPROBAR EL RESULTADO Y FORZAR EL REFRESCO EN AMBAS PANTALLAS
     if (shouldRefresh == true) {
-      // Llama al método refreshHistory() de la pantalla de historial
-      _historyKey.currentState?.refreshHistory();
+      // Refresca la pantalla de HOME (índice 0)
+      _homeKey.currentState?.refreshHome();
 
-      // Opcional: Cambiar a la pestaña de Historial (índice 1)
-      if (_selectedIndex != 1) {
-        _onItemTapped(1);
-      }
+      // Refresca la pantalla de HISTORIAL (índice 1)
+      _historyKey.currentState?.refreshHistory();
     }
   }
 
@@ -81,7 +82,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         children: _widgetOptions,
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _onAddExpenseTapped, // ⬅️ Llama a la función de refresco
+        onPressed: _onAddExpenseTapped,
         shape: const CircleBorder(),
         child: const Icon(Icons.add, size: 30),
       ),
