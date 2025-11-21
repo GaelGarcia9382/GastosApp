@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:gastos/constants/app_colors.dart';
-// ➡️ Importaciones de Lógica
 import 'package:gastos/data/settings_storage_service.dart';
+// ➡️ Importamos el servicio de tema y el main
+import 'package:gastos/services/theme_service.dart';
+import 'package:gastos/main.dart';
 
 class SettingsScreen extends StatefulWidget {
   final Function? onSettingsChanged;
@@ -9,23 +11,17 @@ class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, this.onSettingsChanged});
 
   @override
-  // ➡️ CLASE DE ESTADO PÚBLICA
   State<SettingsScreen> createState() => SettingsScreenState();
 }
 
 class SettingsScreenState extends State<SettingsScreen> {
-  // Servicio de configuración
   final SettingsStorageService _settingsService = SettingsStorageService();
+  final ThemeService _themeService = ThemeService(); // ➡️ Instancia servicio tema
 
-  bool _isDarkMode = true;
   String _selectedCurrency = "\$ Peso Mexicano (MXN)";
   final List<String> _currencies = [
-    "\$ Dólar (USD)",
-    "€ Euro (EUR)",
-    "\$ Peso Mexicano (MXN)",
-    "\$ Peso Argentino (ARS)",
-    "\$ Peso Colombiano (COP)",
-    "\$ Peso Chileno (CLP)",
+    "\$ Dólar (USD)", "€ Euro (EUR)", "\$ Peso Mexicano (MXN)",
+    "\$ Peso Argentino (ARS)", "\$ Peso Colombiano (COP)", "\$ Peso Chileno (CLP)",
   ];
   final TextEditingController _budgetController = TextEditingController();
   bool _isSaving = false;
@@ -49,26 +45,25 @@ class SettingsScreenState extends State<SettingsScreen> {
 
     if (newBudget == null || newBudget < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor, ingresa un presupuesto válido y positivo.'), backgroundColor: AppColors.red),
+        const SnackBar(content: Text('Por favor, ingresa un presupuesto válido.'), backgroundColor: AppColors.red),
       );
       return;
     }
 
-    setState(() {
-      _isSaving = true;
-    });
-
+    setState(() { _isSaving = true; });
     await _settingsService.setMonthlyBudget(newBudget);
-
     widget.onSettingsChanged?.call();
-
-    setState(() {
-      _isSaving = false;
-    });
+    setState(() { _isSaving = false; });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Presupuesto guardado en \$${newBudget.toStringAsFixed(2)}.'), backgroundColor: AppColors.green),
+      const SnackBar(content: Text('Presupuesto guardado.'), backgroundColor: AppColors.green),
     );
+  }
+
+  // ➡️ Función para cambiar el tema
+  void _toggleTheme(bool isDark) {
+    themeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
+    _themeService.saveThemeMode(isDark);
   }
 
   @override
@@ -79,6 +74,9 @@ class SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Detectar el tema actual directamente del notifier
+    final isDark = themeNotifier.value == ThemeMode.dark;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Ajustes"),
@@ -86,50 +84,42 @@ class SettingsScreenState extends State<SettingsScreen> {
           SizedBox(width: 10),
         ],
       ),
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-            child: Column(
-              children: [
-                _buildThemeOption(),
-                const Divider(height: 30),
-                _buildCurrencyOption(),
-                const Divider(height: 30),
-                _buildBudgetOption(),
-                const Divider(height: 30),
-                _buildSerenityTip(),
-                const SizedBox(height: 40),
-                _buildAppInfo(),
-              ],
-            ),
-          ),
-        ],
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+        child: Column(
+          children: [
+            _buildThemeOption(isDark), // Pasamos el estado
+            const Divider(height: 30),
+            _buildCurrencyOption(),
+            const Divider(height: 30),
+            _buildBudgetOption(),
+            const Divider(height: 30),
+            _buildSerenityTip(),
+            const SizedBox(height: 40),
+            _buildAppInfo(),
+          ],
+        ),
       ),
     );
   }
 
-  // ➡️ WIDGET 1: Restaurado completamente
-  Widget _buildThemeOption() {
+  // ➡️ Widget actualizado con lógica real
+  Widget _buildThemeOption(bool isDark) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: const Icon(Icons.palette_outlined, size: 28),
       title: const Text("Tema", style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-      subtitle: Text(_isDarkMode ? "Oscuro" : "Claro", style: const TextStyle(color: AppColors.secondaryText)),
+      subtitle: Text(isDark ? "Oscuro" : "Claro", style: TextStyle(color: Theme.of(context).iconTheme.color)),
       trailing: Switch(
-        value: _isDarkMode,
+        value: isDark,
         onChanged: (value) {
-          setState(() {
-            _isDarkMode = value;
-          });
-          // Lógica para cambiar el tema
+          _toggleTheme(value);
         },
         activeColor: AppColors.accentBrown,
       ),
     );
   }
 
-  // ➡️ WIDGET 2: Restaurado completamente
   Widget _buildCurrencyOption() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -138,20 +128,22 @@ class SettingsScreenState extends State<SettingsScreen> {
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.attach_money, size: 28),
           title: const Text("Moneda", style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-          subtitle: const Text("Selecciona tu moneda principal", style: const TextStyle(color: AppColors.secondaryText)),
+          subtitle: Text("Selecciona tu moneda principal", style: TextStyle(color: Theme.of(context).iconTheme.color)),
         ),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12.0),
           decoration: BoxDecoration(
-            color: AppColors.cardBackground,
+            color: Theme.of(context).cardTheme.color, // Usa el color del tema
             borderRadius: BorderRadius.circular(12),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: _selectedCurrency,
               isExpanded: true,
-              icon: const Icon(Icons.keyboard_arrow_down, color: AppColors.secondaryText),
+              icon: Icon(Icons.keyboard_arrow_down, color: Theme.of(context).iconTheme.color),
+              dropdownColor: Theme.of(context).cardTheme.color, // Fondo del menú
+              style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color), // Color texto
               onChanged: (String? newValue) {
                 setState(() {
                   _selectedCurrency = newValue!;
@@ -170,7 +162,6 @@ class SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // WIDGET 3: _buildBudgetOption (Actualizado con botón de guardado)
   Widget _buildBudgetOption() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -179,21 +170,16 @@ class SettingsScreenState extends State<SettingsScreen> {
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.track_changes_outlined, size: 28),
           title: const Text("Presupuesto Mensual", style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-          subtitle: const Text("Define tu meta mensual", style: const TextStyle(color: AppColors.secondaryText)),
+          subtitle: Text("Define tu meta mensual", style: TextStyle(color: Theme.of(context).iconTheme.color)),
         ),
         const SizedBox(height: 8),
         TextField(
           controller: _budgetController,
           keyboardType: TextInputType.number,
-          decoration: InputDecoration(
+          decoration: const InputDecoration(
             prefixText: "\$ ",
             hintText: "1000.00",
-            filled: true,
-            fillColor: AppColors.cardBackground,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
+            // fillColor se maneja automáticamente en el main.dart ahora
           ),
         ),
 
@@ -216,7 +202,6 @@ class SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ➡️ WIDGET 4: Restaurado completamente
   Widget _buildSerenityTip() {
     return Card(
       child: Padding(
@@ -227,9 +212,14 @@ class SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: RichText(
-                text: const TextSpan(
-                  style: TextStyle(fontFamily: 'Lato', color: AppColors.secondaryText, fontSize: 14, height: 1.4),
-                  children: [
+                text: TextSpan(
+                  style: TextStyle(
+                      fontFamily: 'Lato',
+                      color: Theme.of(context).textTheme.bodyMedium?.color, // Color adaptable
+                      fontSize: 14,
+                      height: 1.4
+                  ),
+                  children: const [
                     TextSpan(text: "Consejo de Serenidad: ", style: TextStyle(fontWeight: FontWeight.bold)),
                     TextSpan(text: "El manejo consciente de tus finanzas es una práctica de autocuidado. Tómate un momento cada día para revisar tus gastos con calma y sin juicio."),
                   ],
@@ -242,7 +232,6 @@ class SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ➡️ WIDGET 5: Restaurado completamente
   Widget _buildAppInfo() {
     return Column(
       children: [
@@ -253,14 +242,14 @@ class SettingsScreenState extends State<SettingsScreen> {
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           "Tu camino hacia la paz financiera",
-          style: TextStyle(color: AppColors.secondaryText, fontSize: 14),
+          style: TextStyle(color: Theme.of(context).iconTheme.color, fontSize: 14),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           "Versión 1.0.0",
-          style: TextStyle(color: AppColors.secondaryText, fontSize: 12),
+          style: TextStyle(color: Theme.of(context).iconTheme.color, fontSize: 12),
         ),
       ],
     );
