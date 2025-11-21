@@ -16,12 +16,15 @@ class MainNavigationScreen extends StatefulWidget {
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _selectedIndex = 0;
 
-  // Lista de las pantallas principales
-  static const List<Widget> _widgetOptions = <Widget>[
-    HomeScreen(),
-    HistoryScreen(),
-    CategoriesScreen(),
-    SettingsScreen(),
+  // ➡️ 1. DEFINIR LA GLOBAL KEY USANDO EL ESTADO PÚBLICO
+  final GlobalKey<HistoryScreenState> _historyKey = GlobalKey<HistoryScreenState>();
+
+  // 2. ASIGNAR LAS PANTALLAS
+  late final List<Widget> _widgetOptions = <Widget>[
+    const HomeScreen(),
+    HistoryScreen(key: _historyKey), // ⬅️ Asignar la Key
+    const CategoriesScreen(),
+    const SettingsScreen(),
   ];
 
   void _onItemTapped(int index) {
@@ -30,15 +33,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     });
   }
 
-  void _onAddExpenseTapped() {
-    // La pantalla de "Nuevo Gasto" se presenta de forma modal
-    showModalBottomSheet(
+  // ➡️ 3. FUNCIÓN ASÍNCRONA PARA ABRIR EL MODAL Y REFRESCAR EL HISTORIAL
+  void _onAddExpenseTapped() async {
+    // Abrir el modal y esperar el resultado (será 'true' si se guardó un gasto)
+    final bool? shouldRefresh = await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
         return DraggableScrollableSheet(
-          initialChildSize: 0.9, // Ocupa el 90% de la pantalla
+          initialChildSize: 0.9,
           minChildSize: 0.5,
           maxChildSize: 0.9,
           builder: (_, controller) {
@@ -56,6 +60,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         );
       },
     );
+
+    // ➡️ 4. COMPROBAR EL RESULTADO Y FORZAR EL REFRESCO EN EL HIJO
+    if (shouldRefresh == true) {
+      // Llama al método refreshHistory() de la pantalla de historial
+      _historyKey.currentState?.refreshHistory();
+
+      // Opcional: Cambiar a la pestaña de Historial (índice 1)
+      if (_selectedIndex != 1) {
+        _onItemTapped(1);
+      }
+    }
   }
 
   @override
@@ -66,7 +81,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         children: _widgetOptions,
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _onAddExpenseTapped,
+        onPressed: _onAddExpenseTapped, // ⬅️ Llama a la función de refresco
         shape: const CircleBorder(),
         child: const Icon(Icons.add, size: 30),
       ),
@@ -74,7 +89,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       bottomNavigationBar: BottomAppBar(
         shape: const CircularNotchedRectangle(),
         notchMargin: 8.0,
-        color: Colors.white, // El fondo de la barra de navegación es blanco
+        color: Colors.white,
         elevation: 10,
         shadowColor: Colors.black.withOpacity(0.1),
         child: SizedBox(
@@ -126,7 +141,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 shape: BoxShape.circle,
               ),
             ),
-          // Text(label, style: TextStyle(color: color, fontSize: 12)),
         ],
       ),
     );

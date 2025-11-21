@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:gastos/constants/app_colors.dart';
+import 'package:gastos/data/gasto.dart';
+import 'package:gastos/data/gasto_storage_service.dart';
 
 class NewExpenseScreen extends StatefulWidget {
-  // El ScrollController es para que el modal funcione bien
   final ScrollController? scrollController;
-
   const NewExpenseScreen({super.key, this.scrollController});
 
   @override
@@ -13,10 +13,15 @@ class NewExpenseScreen extends StatefulWidget {
 }
 
 class _NewExpenseScreenState extends State<NewExpenseScreen> {
-  DateTime _selectedDate = DateTime(2025, 11, 12);
-  String? _selectedCategory; // Nombre de la categoría seleccionada
+  // Controladores para capturar los datos
+  final TextEditingController _cantidadController = TextEditingController();
+  final TextEditingController _descripcionController = TextEditingController();
 
-  // Datos de ejemplo para las categorías
+  final GastoStorageService _storageService = GastoStorageService();
+
+  DateTime _selectedDate = DateTime.now();
+  String? _selectedCategory;
+
   final Map<String, IconData> categories = {
     'Alimentación': Icons.restaurant,
     'Transporte': Icons.directions_car,
@@ -32,13 +37,59 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
-      locale: const Locale('es', 'ES'), // Para que el DatePicker salga en español
+      locale: const Locale('es', 'ES'),
     );
     if (picked != null && picked != _selectedDate) {
       setState(() {
         _selectedDate = picked;
       });
     }
+  }
+
+  void _saveExpense() async {
+    final cantidadText = _cantidadController.text.replaceAll(',', '.');
+    final descripcionText = _descripcionController.text.trim();
+
+    final double? cantidad = double.tryParse(cantidadText);
+
+    if (cantidad == null || cantidad <= 0) {
+      _showSnackBar("Por favor, ingresa una cantidad válida.", Colors.red);
+      return;
+    }
+    if (_selectedCategory == null) {
+      _showSnackBar("Por favor, selecciona una categoría.", Colors.red);
+      return;
+    }
+
+    final newGasto = Gasto(
+      cantidad: cantidad,
+      categoria: _selectedCategory!,
+      fecha: _selectedDate,
+      descripcion: descripcionText.isNotEmpty ? descripcionText : null,
+    );
+
+    await _storageService.addGasto(newGasto);
+
+    _showSnackBar("Gasto de \$${cantidad.toStringAsFixed(2)} agregado con éxito.", Colors.green);
+
+    // ➡️ ESTE ES EL PASO CLAVE: Cerramos y enviamos 'true'
+    Navigator.of(context).pop(true);
+  }
+
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _cantidadController.dispose();
+    _descripcionController.dispose();
+    super.dispose();
   }
 
   @override
@@ -49,7 +100,6 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Encabezado con título y botón de cerrar
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -68,37 +118,24 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
             ],
           ),
           const SizedBox(height: 20),
-
-          // Formulario
-          _buildTextField("Cantidad", "0.00", keyboardType: TextInputType.number),
+          _buildTextField("Cantidad", "0.00", keyboardType: TextInputType.number, controller: _cantidadController),
           const SizedBox(height: 20),
-
-          // Selector de Categoría
           const Text("Categoría", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
           const SizedBox(height: 10),
           _buildCategoryGrid(),
-
           const SizedBox(height: 20),
-
-          // Selector de Fecha
           _buildDateField(),
           const SizedBox(height: 20),
-
-          // Descripción
-          _buildTextField("Descripción (opcional)", "Agrega una nota sobre este gasto...", maxLines: 3),
+          _buildTextField("Descripción (opcional)", "Agrega una nota sobre este gasto...", maxLines: 3, controller: _descripcionController),
           const SizedBox(height: 30),
 
-          // Botón de Agregar Gasto
           SizedBox(
             width: double.infinity,
             child: TextButton(
-              onPressed: () {
-                // Lógica para agregar gasto
-                Navigator.of(context).pop(); // Cierra el modal
-              },
+              onPressed: _saveExpense,
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: AppColors.cardBackground, // Como en el diseño
+                backgroundColor: AppColors.cardBackground,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -106,7 +143,7 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
               child: const Text(
                 "Agregar Gasto",
                 style: TextStyle(
-                  color: AppColors.secondaryText, // Color tenue como en el diseño
+                  color: AppColors.secondaryText,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
@@ -118,13 +155,15 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
     );
   }
 
-  Widget _buildTextField(String label, String hint, {int maxLines = 1, TextInputType keyboardType = TextInputType.text}) {
+  Widget _buildTextField(String label, String hint, {int maxLines = 1, TextInputType keyboardType = TextInputType.text, TextEditingController? controller}) {
+    // ... (Método sin cambios en la lógica interna)
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
         TextField(
+          controller: controller,
           keyboardType: keyboardType,
           maxLines: maxLines,
           decoration: InputDecoration(
@@ -144,10 +183,11 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
   }
 
   Widget _buildDateField() {
+    // ... (Método sin cambios)
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text("Fecha", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        const Text("Fecha", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
         GestureDetector(
           onTap: () => _selectDate(context),
@@ -162,7 +202,7 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  DateFormat.yMd('es_ES').format(_selectedDate), // Formato 12/11/2025
+                  DateFormat.yMd('es_ES').format(_selectedDate),
                   style: const TextStyle(fontSize: 16),
                 ),
                 const Icon(Icons.calendar_today, color: AppColors.secondaryText),
@@ -175,13 +215,13 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
   }
 
   Widget _buildCategoryGrid() {
-    // Usamos GridView.builder para un grid dinámico
+    // ... (Método sin cambios)
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2, // Dos columnas como en el diseño
-        childAspectRatio: 3.5, // Ancho > Alto
+        crossAxisCount: 2,
+        childAspectRatio: 3.5,
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
       ),
