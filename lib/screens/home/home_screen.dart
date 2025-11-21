@@ -2,8 +2,12 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:gastos/constants/app_colors.dart';
+// ➡️ Importaciones de Gasto (Asegúrate de que las rutas sean correctas)
 import 'package:gastos/data/gasto.dart';
 import 'package:gastos/data/gasto_storage_service.dart';
+// ➡️ Importaciones de Categoría (Asegúrate de que las rutas sean correctas)
+import 'package:gastos/data/category.dart';
+import 'package:gastos/data/category_storage_service.dart';
 
 const double _presupuestoMensual = 1000.00;
 
@@ -11,32 +15,39 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  // ➡️ HACEMOS EL ESTADO PÚBLICO
   State<HomeScreen> createState() => HomeScreenState();
 }
 
 class HomeScreenState extends State<HomeScreen> {
   final GastoStorageService _storageService = GastoStorageService();
-  late Future<List<Gasto>> _gastosFuture;
+  final CategoryStorageService _categoryService = CategoryStorageService();
+
+  // Future que combina Gastos y Categorías
+  late Future<List<dynamic>> _combinedDataFuture;
 
   @override
   void initState() {
     super.initState();
-    _loadGastos();
+    _loadCombinedData();
   }
 
-  // ➡️ MÉTODO PÚBLICO PARA SER LLAMADO DESDE MAINNAVIGATIONSCREEN
+  // ➡️ Método público de refresco que carga ambos datos
   void refreshHome() {
-    _loadGastos();
+    _loadCombinedData();
   }
 
-  void _loadGastos() {
+  void _loadCombinedData() {
     setState(() {
-      _gastosFuture = _storageService.getGastos();
+      // Usamos Future.wait para esperar ambas cargas (Gastos y Categorías)
+      _combinedDataFuture = Future.wait([
+        _storageService.getGastos(),
+        _categoryService.getCategories(),
+      ]);
     });
   }
 
-  Map<String, dynamic> _calculateStats(List<Gasto> expenses) {
+  // ➡️ FUNCIÓN CLAVE: Calcula estadísticas y añade visuales dinámicos
+  Map<String, dynamic> _calculateStats(List<Gasto> expenses, Map<String, Category> categoryMap) {
     if (expenses.isEmpty) {
       return {
         'totalGastado': 0.0,
@@ -57,12 +68,21 @@ class HomeScreenState extends State<HomeScreen> {
       );
     }
 
+    // Crear la lista con la información visual
     final List<Map<String, dynamic>> categoriasList = categorias.entries.map((entry) {
+      final String nombre = entry.key;
       final double monto = entry.value;
+
+      // Obtener el objeto Category para los visuales
+      final Category? cat = categoryMap[nombre];
+
       return {
-        'nombre': entry.key,
+        'nombre': nombre,
         'monto': monto,
-        'porcentaje': monto / totalGastado,
+        'porcentaje': totalGastado > 0 ? monto / totalGastado : 0.0,
+        // Usar los visuales del Category o un fallback
+        'color': cat?.color ?? Colors.grey,
+        'icon': cat?.icon ?? Icons.monetization_on,
       };
     }).toList();
 
@@ -74,15 +94,6 @@ class HomeScreenState extends State<HomeScreen> {
       'presupuesto': _presupuestoMensual,
     };
   }
-
-  final Map<String, Map<String, dynamic>> _categoryVisuals = {
-    'Alimentación': {'icon': Icons.restaurant, 'color': AppColors.red},
-    'Transporte': {'icon': Icons.directions_car, 'color': AppColors.blue},
-    'Entretenimiento': {'icon': Icons.videogame_asset, 'color': AppColors.purple},
-    'Salud': {'icon': Icons.medical_services, 'color': AppColors.green},
-    'Educación': {'icon': Icons.school, 'color': AppColors.yellow},
-    'Compras': {'icon': Icons.shopping_bag, 'color': AppColors.orange},
-  };
 
 
   @override
@@ -98,7 +109,7 @@ class HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Encabezado
+                  // Encabezado (ESTÁTICO)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -121,77 +132,77 @@ class HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // FutureBuilder para cargar los datos
-                  FutureBuilder<List<Gasto>>(
-                      future: _gastosFuture,
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const Center(child: CircularProgressIndicator());
-                        }
-
-                        if (snapshot.hasError) {
-                          return const Text("Error al cargar datos.");
-                        }
-
-                        final List<Gasto> expenses = snapshot.data ?? [];
-
-                        // Si no hay datos, mostramos un mensaje centrado
-                        if (expenses.isEmpty) {
-                          return const Center(child: Text("Aún no hay gastos registrados."));
-                        }
-
-                        final stats = _calculateStats(expenses);
-
-                        final double totalGastado = stats['totalGastado'];
-                        final double presupuesto = stats['presupuesto'];
-                        final double disponible = presupuesto - totalGastado;
-                        final double porcentajeGastado = totalGastado / presupuesto;
-                        final List<Map<String, dynamic>> categorias = stats['categorias'];
-
-                        // Devolvemos el resto de los Widgets dentro de un Column
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Tarjeta de Resumen de Gastos
-                            _buildSummaryCard(
-                                totalGastado,
-                                disponible,
-                                presupuesto,
-                                min(porcentajeGastado, 1.0)
-                            ),
-
-                            const SizedBox(height: 30),
-                            const Text(
-                              "Categorías Principales",
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.primaryText,
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-
-                            // Gráfico (Usar datos dinámicos en el placeholder)
-                            _buildChartPlaceholder(categorias, totalGastado),
-
-                            const SizedBox(height: 30),
-
-                            // Lista de Categorías (Mapeo dinámico)
-                            ...categorias.map((cat) {
-                              final visuals = _categoryVisuals[cat['nombre']] ?? {'icon': Icons.monetization_on, 'color': Colors.grey};
-                              return _buildCategoryItem(
-                                  cat['nombre'],
-                                  cat['monto'],
-                                  cat['porcentaje'],
-                                  visuals['color'],
-                                  visuals['icon']
-                              );
-                            }).toList(),
-
-                            const SizedBox(height: 80),
-                          ],
-                        );
+                  // ➡️ FUTURE BUILDER (Contenido Dinámico)
+                  FutureBuilder<List<dynamic>>(
+                    future: _combinedDataFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
                       }
+
+                      if (snapshot.hasError) {
+                        return Center(child: Text("Error al cargar datos: ${snapshot.error}"));
+                      }
+
+                      // 1. Separar los datos
+                      final List<Gasto> expenses = snapshot.data![0];
+                      final List<Category> categoriesList = snapshot.data![1];
+
+                      // Crear mapa de Categorías (Nombre -> Objeto Category) para búsqueda rápida
+                      final Map<String, Category> categoryMap = {
+                        for (var cat in categoriesList) cat.nombre: cat
+                      };
+
+                      // 2. Calcular estadísticas
+                      final stats = _calculateStats(expenses, categoryMap);
+
+                      final double totalGastado = stats['totalGastado'];
+                      final double presupuesto = stats['presupuesto'];
+                      final double disponible = presupuesto - totalGastado;
+                      final double porcentajeGastado = totalGastado / presupuesto;
+                      final List<Map<String, dynamic>> categorias = stats['categorias'];
+
+                      // 3. Devolvemos el contenido que dependía de los datos
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Tarjeta de Resumen de Gastos (Diseño Original)
+                          _buildSummaryCard(totalGastado, disponible, presupuesto, min(porcentajeGastado, 1.0)),
+
+                          const SizedBox(height: 30),
+                          const Text(
+                            "Categorías Principales",
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primaryText,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+
+                          // Gráfico (Diseño Original)
+                          _buildChartPlaceholder(categorias, totalGastado),
+
+                          const SizedBox(height: 30),
+
+                          // Lista de Categorías (Mapeo dinámico)
+                          if (categorias.isEmpty)
+                            const Center(child: Text("Aún no hay gastos registrados.")),
+
+                          ...categorias.map((cat) {
+                            return _buildCategoryItem(
+                                cat['nombre'],
+                                cat['monto'],
+                                cat['porcentaje'],
+                                cat['color'], // Color dinámico
+                                cat['icon'] // Icono dinámico
+                            );
+                          }).toList(),
+
+                          const SizedBox(height: 80),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -202,9 +213,12 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ----------------------------------------------------------------------
+  // WIDGETS AUXILIARES (Con el diseño original)
+  // ----------------------------------------------------------------------
+
   Widget _buildSummaryCard(double totalGastado, double disponible,
       double presupuesto, double porcentaje) {
-    // ... (sin cambios)
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -256,19 +270,20 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildChartPlaceholder(List<Map<String, dynamic>> categorias, double totalGastado) {
-    // ... (sin cambios)
     if (totalGastado == 0) {
       return const Center(child: Text("No hay datos para mostrar en el gráfico."));
     }
 
+    // Lógica para crear un degradado (SweepGradient) basado en las categorías
     final List<Color> colors = [];
     final List<double> stops = [];
     double currentStop = 0.0;
 
     for (var cat in categorias) {
       final double porcentaje = cat['porcentaje'];
-      final Color color = _categoryVisuals[cat['nombre']]?['color'] ?? Colors.grey;
+      final Color color = cat['color']; // ⬅️ Usar color dinámico
 
+      // Asegurar que el color se repita al inicio del siguiente segmento para un borde limpio
       if (currentStop > 0.0) {
         colors.add(color);
         stops.add(currentStop);
@@ -279,6 +294,7 @@ class HomeScreenState extends State<HomeScreen> {
       stops.add(currentStop);
     }
 
+    // Rellenar el resto del círculo con transparente
     if (currentStop < 1.0) {
       colors.add(Colors.transparent);
       stops.add(1.0);
@@ -298,6 +314,7 @@ class HomeScreenState extends State<HomeScreen> {
             height: 140,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
+              // Gráfico de dona simulado con datos dinámicos
               gradient: SweepGradient(
                 colors: colors,
                 stops: stops,
@@ -322,7 +339,6 @@ class HomeScreenState extends State<HomeScreen> {
 
   Widget _buildCategoryItem(String nombre, double monto, double porcentaje,
       Color color, IconData icono) {
-    // ... (sin cambios)
     return Card(
       margin: const EdgeInsets.only(bottom: 15),
       child: Padding(
@@ -331,7 +347,7 @@ class HomeScreenState extends State<HomeScreen> {
           children: [
             Row(
               children: [
-                Icon(icono, color: color, size: 24),
+                Icon(icono, color: color, size: 24), // ⬅️ Ícono dinámico
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -360,7 +376,7 @@ class HomeScreenState extends State<HomeScreen> {
                 value: porcentaje,
                 minHeight: 8,
                 backgroundColor: AppColors.background,
-                valueColor: AlwaysStoppedAnimation<Color>(color),
+                valueColor: AlwaysStoppedAnimation<Color>(color), // ⬅️ Color dinámico
               ),
             ),
           ],

@@ -1,52 +1,90 @@
 import 'package:flutter/material.dart';
 import 'package:gastos/constants/app_colors.dart';
 import 'package:gastos/widgets/categories/category_edit_modal.dart';
+import 'package:gastos/data/category.dart';
+import 'package:gastos/data/category_storage_service.dart';
 
 class CategoriesScreen extends StatefulWidget {
-  const CategoriesScreen({super.key});
+  final Function? onCategoriesChanged;
+
+  const CategoriesScreen({super.key, this.onCategoriesChanged});
 
   @override
-  State<CategoriesScreen> createState() => _CategoriesScreenState();
+  // ➡️ CAMBIO: Usar el estado público
+  State<CategoriesScreen> createState() => CategoriesScreenState();
 }
 
-class _CategoriesScreenState extends State<CategoriesScreen> {
-  // Datos de ejemplo
-  final List<Map<String, dynamic>> _categories = [
-    { 'nombre': 'Alimentación', 'icono': Icons.restaurant, 'color': AppColors.orange },
-    { 'nombre': 'Transporte', 'icono': Icons.directions_car, 'color': AppColors.blue },
-    { 'nombre': 'Entretenimiento', 'icono': Icons.videogame_asset, 'color': AppColors.purple },
-    { 'nombre': 'Salud', 'icono': Icons.medical_services, 'color': AppColors.red },
-    { 'nombre': 'Educación', 'icono': Icons.school, 'color': AppColors.green },
-  ];
+// ➡️ CLASE DE ESTADO PÚBLICA
+class CategoriesScreenState extends State<CategoriesScreen> {
+  final CategoryStorageService _storageService = CategoryStorageService();
+  late Future<List<Category>> _categoriesFuture;
 
-  void _showCategoryModal({Map<String, dynamic>? category}) {
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  // Método público para el refresco global
+  void refreshCategories() {
+    _loadCategories();
+  }
+
+  void _loadCategories() {
+    setState(() {
+      _categoriesFuture = _storageService.getCategories();
+    });
+    // Notificamos a la navegación principal para refrescar HOME y HISTORIAL
+    widget.onCategoriesChanged?.call();
+  }
+
+  // Lógica para guardar (Crear o Editar)
+  void _showCategoryModal({Category? category}) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return CategoryEditModal(
-          category: category,
-          onSave: (String nombre, IconData icono, Color color) {
-            // Aquí irá la lógica para guardar (Crear o Editar)
-            if (category == null) {
-              // Lógica de Crear
-              setState(() {
-                _categories.add({'nombre': nombre, 'icono': icono, 'color': color});
-              });
-            } else {
-              // Lógica de Editar
-              setState(() {
-                // Aquí buscarías la categoría por ID y la actualizarías
-                final index = _categories.indexWhere((c) => c['nombre'] == category['nombre']);
-                if (index != -1) {
-                  _categories[index] = {'nombre': nombre, 'icono': icono, 'color': color};
-                }
-              });
-            }
+          category: category != null ? {
+            'nombre': category.nombre,
+            'icono': category.icon,
+            'color': category.color,
+          } : null,
+          onSave: (String nombre, IconData icono, Color color) async {
+            final newCategory = Category(
+              id: category?.id,
+              nombre: nombre,
+              iconCodePoint: icono.codePoint,
+              colorValue: color.value,
+            );
+
+            await _storageService.saveCategory(newCategory);
+
+            _loadCategories();
             Navigator.of(context).pop();
           },
         );
       },
     );
+  }
+
+  // Lógica para eliminar
+  void _deleteCategory(Category category) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar Categoría'),
+        content: Text('¿Seguro que quieres eliminar la categoría "${category.nombre}"? Esto no eliminará los gastos ya registrados.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Eliminar', style: TextStyle(color: AppColors.red))),
+        ],
+      ),
+    ) ?? false;
+
+    if (confirmed && category.id != null) {
+      await _storageService.deleteCategory(category.id!);
+      _loadCategories();
+    }
   }
 
   @override
@@ -55,41 +93,45 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       appBar: AppBar(
         title: const Text("Categorías"),
         actions: [
-          // Botón de Añadir (+)
           IconButton(
             icon: const Icon(Icons.add_circle_outline, color: AppColors.primaryText, size: 28),
-            onPressed: () {
-              _showCategoryModal(); // Llamar sin categoría para "Crear"
-            },
+            onPressed: () => _showCategoryModal(),
           ),
           const SizedBox(width: 10),
         ],
       ),
-      body: Stack( // Envolver con Stack
-        children: [
-          ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100), // Padding inferior
-            itemCount: _categories.length,
+      body: FutureBuilder<List<Category>>(
+        future: _categoriesFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(child: Text("Error al cargar categorías: ${snapshot.error}"));
+          }
+
+          final List<Category> categories = snapshot.data ?? [];
+          if (categories.isEmpty) {
+            return const Center(child: Text("Aún no tienes categorías. ¡Crea una!"));
+          }
+
+          return ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+            itemCount: categories.length,
             separatorBuilder: (context, index) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
-              final category = _categories[index];
+              final category = categories[index];
               return _buildCategoryTile(
-                category['nombre'],
-                category['icono'],
-                category['color'],
-                onEdit: () {
-                  _showCategoryModal(category: category); // Llamar con categoría para "Editar"
-                },
-                onDelete: () {
-                  // Lógica para eliminar
-                  setState(() {
-                    _categories.removeAt(index);
-                  });
-                },
+                category.nombre,
+                category.icon,
+                category.color,
+                onEdit: () => _showCategoryModal(category: category),
+                onDelete: () => _deleteCategory(category),
               );
             },
-          ),
-        ],
+          );
+        },
       ),
     );
   }

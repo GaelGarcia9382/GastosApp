@@ -1,15 +1,13 @@
-import 'dart:convert'; // Necesario para GastoStorageService, asegúrate de que esté
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Necesario
 import 'package:gastos/constants/app_colors.dart';
-import 'package:gastos/data/gasto.dart'; // Asegúrate de tener tu modelo Gasto
-import 'package:gastos/data/gasto_storage_service.dart'; // Asegúrate de tener tu servicio
-import 'package:gastos/constants/category_constants.dart';
+import 'package:gastos/data/gasto.dart';
+import 'package:gastos/data/gasto_storage_service.dart';
+// ➡️ Importaciones dinámicas
+import 'package:gastos/data/category.dart';
+import 'package:gastos/data/category_storage_service.dart';
 
 class HistoryScreen extends StatefulWidget {
-
-  // ➡️ CALLBACK PARA NOTIFICAR AL PADRE SOBRE CAMBIOS (Eliminación)
   final Function? onExpenseChanged;
 
   const HistoryScreen({
@@ -23,26 +21,29 @@ class HistoryScreen extends StatefulWidget {
 
 class HistoryScreenState extends State<HistoryScreen> {
   final GastoStorageService _storageService = GastoStorageService();
-  late Future<List<Gasto>> _gastosFuture;
+  final CategoryStorageService _categoryService = CategoryStorageService();
+
+  late Future<List<dynamic>> _combinedDataFuture;
 
   @override
   void initState() {
     super.initState();
-    _loadGastos();
+    _loadCombinedData();
   }
 
-  // Método público para ser llamado desde MainNavigationScreen
-  void refreshHistory() {
-    _loadGastos();
-  }
-
-  void _loadGastos() {
+  void _loadCombinedData() {
     setState(() {
-      _gastosFuture = _storageService.getGastos();
+      _combinedDataFuture = Future.wait([
+        _storageService.getGastos(),
+        _categoryService.getCategories(),
+      ]);
     });
   }
 
-  // ➡️ FUNCIÓN PARA CONFIRMAR Y ELIMINAR EL GASTO
+  void refreshHistory() {
+    _loadCombinedData();
+  }
+
   void _confirmAndDelete(Gasto gasto) async {
     final bool? confirmed = await showDialog<bool>(
       context: context,
@@ -69,13 +70,9 @@ class HistoryScreenState extends State<HistoryScreen> {
       if (gasto.id != null) {
         await _storageService.deleteGasto(gasto.id!);
 
-        // 1. Forzar el refresco de la pantalla de historial
-        _loadGastos();
-
-        // 2. ➡️ NOTIFICAR AL PADRE (MainNavigationScreen)
+        _loadCombinedData();
         widget.onExpenseChanged?.call();
 
-        // 3. Mostrar un mensaje de éxito
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Gasto eliminado con éxito.'), backgroundColor: Colors.green),
         );
@@ -83,24 +80,35 @@ class HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
+  // ➡️ Método auxiliar para obtener el visual de la categoría
+  Map<String, dynamic> _getCategoryVisuals(String categoryName, Map<String, Category> categoryMap) {
+    final Category? cat = categoryMap[categoryName];
+    return {
+      'icon': cat?.icon ?? Icons.monetization_on,
+      'color': cat?.color ?? Colors.grey,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Historial de Gastos'),
-      ),
-      body: FutureBuilder<List<Gasto>>(
-        future: _gastosFuture,
+      appBar: AppBar(title: const Text('Historial de Gastos')),
+      body: FutureBuilder<List<dynamic>>(
+        future: _combinedDataFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-
           if (snapshot.hasError) {
             return Center(child: Text("Error al cargar datos: ${snapshot.error}"));
           }
 
-          final List<Gasto> gastos = snapshot.data ?? [];
+          final List<Gasto> gastos = snapshot.data![0];
+          final List<Category> categoriesList = snapshot.data![1];
+
+          final Map<String, Category> categoryMap = {
+            for (var cat in categoriesList) cat.nombre: cat
+          };
 
           if (gastos.isEmpty) {
             return const Center(
@@ -111,7 +119,6 @@ class HistoryScreenState extends State<HistoryScreen> {
             );
           }
 
-          // Ordenar por fecha descendente
           gastos.sort((a, b) => b.fecha.compareTo(a.fecha));
 
           return ListView.builder(
@@ -119,7 +126,7 @@ class HistoryScreenState extends State<HistoryScreen> {
             itemCount: gastos.length,
             itemBuilder: (context, index) {
               final gasto = gastos[index];
-              return _buildExpenseTile(gasto);
+              return _buildExpenseTile(gasto, categoryMap);
             },
           );
         },
@@ -127,13 +134,12 @@ class HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  // ➡️ MÉTODO DE CONSTRUCCIÓN CORREGIDO PARA MOSTRAR DETALLES
-  Widget _buildExpenseTile(Gasto gasto) {
+  Widget _buildExpenseTile(Gasto gasto, Map<String, Category> categoryMap) {
     final String formattedDate = DateFormat('dd MMM yyyy - HH:mm').format(gasto.fecha);
 
-    // ➡️ CORRECCIÓN DEL ERROR: Usar la función importada
-    final Color categoryColor = getColorForCategory(gasto.categoria);
-    final IconData categoryIcon = getIconForCategory(gasto.categoria);
+    final visuals = _getCategoryVisuals(gasto.categoria, categoryMap);
+    final Color categoryColor = visuals['color'];
+    final IconData categoryIcon = visuals['icon'];
 
 
     return Card(
@@ -151,10 +157,7 @@ class HistoryScreenState extends State<HistoryScreen> {
               : gasto.categoria,
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-
-        // 🕑 Subtítulo: Muestra la fecha y hora
         subtitle: Text(formattedDate),
-
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -162,7 +165,6 @@ class HistoryScreenState extends State<HistoryScreen> {
               "\$${gasto.cantidad.toStringAsFixed(2)}",
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
-            // Botón de eliminar
             IconButton(
               icon: const Icon(Icons.delete_outline, color: AppColors.red, size: 22),
               onPressed: () {
@@ -175,17 +177,3 @@ class HistoryScreenState extends State<HistoryScreen> {
     );
   }
 }
-
-// ⚠️ NOTA IMPORTANTE:
-// Si tu archivo GastoStorageService.dart no tiene el método deleteGasto,
-// asegúrate de que se vea así:
-
-// // En GastoStorageService.dart
-// Future<void> deleteGasto(int id) async {
-//     List<Gasto> gastos = await getGastos();
-//     gastos = gastos.where((gasto) => gasto.id != id).toList();
-//     final List<Map<String, dynamic>> gastosJsonList = gastos.map((gasto) => gasto.toJson()).toList();
-//     final String gastosJsonString = json.encode(gastosJsonList);
-//     final SharedPreferences prefs = await SharedPreferences.getInstance();
-//     await prefs.setString(_gastosKey, gastosJsonString);
-// }
