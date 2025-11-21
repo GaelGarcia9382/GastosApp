@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:gastos/constants/app_colors.dart';
 import 'package:gastos/screens/categories/categories_screen.dart';
+// ➡️ Importa ambos States
 import 'package:gastos/screens/history/history_screen.dart';
-import 'package:gastos/screens/home/home_screen.dart'; // Importación necesaria
+import 'package:gastos/screens/home/home_screen.dart';
 import 'package:gastos/screens/new_expense/new_expense_screen.dart';
 import 'package:gastos/screens/settings/settings_screen.dart';
 
@@ -13,20 +14,38 @@ class MainNavigationScreen extends StatefulWidget {
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
 
+// ➡️ HACEMOS EL ESTADO PÚBLICO
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _selectedIndex = 0;
 
-  // ➡️ 1. DEFINIR DOS GLOBAL KEYS (HistoryScreenState y HomeScreenState son públicas)
+  // 1. DEFINIR LAS GLOBAL KEYS
   final GlobalKey<HistoryScreenState> _historyKey = GlobalKey<HistoryScreenState>();
-  final GlobalKey<HomeScreenState> _homeKey = GlobalKey<HomeScreenState>(); // ⬅️ NUEVA KEY
+  final GlobalKey<HomeScreenState> _homeKey = GlobalKey<HomeScreenState>();
 
-  // 2. ASIGNAR LAS PANTALLAS
-  late final List<Widget> _widgetOptions = <Widget>[
-    HomeScreen(key: _homeKey), // ⬅️ ASIGNAR KEY A HOME
-    HistoryScreen(key: _historyKey),
-    const CategoriesScreen(),
-    const SettingsScreen(),
-  ];
+  // 2. DEFINICIÓN DE LA LISTA DE PANTALLAS
+  late List<Widget> _widgetOptions;
+
+  @override
+  void initState() {
+    super.initState();
+    // 3. INICIALIZAMOS LA LISTA EN initState PARA PASAR CALLBACKS
+    _widgetOptions = <Widget>[
+      // HOME SCREEN
+      HomeScreen(key: _homeKey),
+
+      // HISTORY SCREEN - ➡️ PASAMOS EL CALLBACK
+      HistoryScreen(
+        key: _historyKey,
+        onExpenseChanged: () {
+          // Cuando un gasto se elimina en HistoryScreen, llamamos a refreshHome
+          _homeKey.currentState?.refreshHome();
+        },
+      ),
+
+      const CategoriesScreen(),
+      const SettingsScreen(),
+    ];
+  }
 
   void _onItemTapped(int index) {
     setState(() {
@@ -34,11 +53,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     });
   }
 
-  // 3. FUNCIÓN ASÍNCRONA QUE ESPERA EL RESULTADO DEL MODAL
-  // En main_navigation_screen.dart
-
+  // FUNCIÓN ASÍNCRONA QUE MANEJA EL MODAL Y EL REFRESCO
   void _onAddExpenseTapped() async {
-    // Abrir el modal y esperar el resultado (será 'true' si se guardó un gasto)
     final bool? shouldRefresh = await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -53,24 +69,26 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               decoration: const BoxDecoration(
                 color: AppColors.background,
                 borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    topRight: Radius.circular(20),
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
               ),
-            ),
-            child: NewExpenseScreen(scrollController: controller),
+              child: NewExpenseScreen(scrollController: controller),
             );
           },
         );
       },
     );
 
-    // ➡️ COMPROBAR EL RESULTADO Y FORZAR EL REFRESCO EN AMBAS PANTALLAS
+    // ➡️ COMPROBAR Y FORZAR EL REFRESCO SIN CAMBIAR DE PESTAÑA
     if (shouldRefresh == true) {
-      // Refresca la pantalla de HOME (índice 0)
+      // Refresca la pantalla de HOME
       _homeKey.currentState?.refreshHome();
 
-      // Refresca la pantalla de HISTORIAL (índice 1)
+      // Refresca la pantalla de HISTORIAL
       _historyKey.currentState?.refreshHistory();
+
+      // El usuario permanece en la pestaña actual (Solución a tu último punto)
     }
   }
 

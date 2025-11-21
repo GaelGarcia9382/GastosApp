@@ -44,5 +44,23 @@ class GastoStorageService {
     await prefs.setString(_gastosKey, gastosJsonString);
   }
 
-// (Aquí se añadirán las funciones de Actualizar y Eliminar)
+// --- LÓGICA DE ELIMINACIÓN (D de CRUD) ---
+  Future<void> deleteGasto(int id) async {
+    // 1. Obtener la lista actual de gastos
+    List<Gasto> gastos = await getGastos();
+
+    // 2. Filtrar la lista, excluyendo el gasto con el ID proporcionado
+    // El método 'where' crea un iterable con todos los elementos que cumplen la condición.
+    gastos = gastos.where((gasto) => gasto.id != id).toList();
+
+    // 3. Codificar la lista restante a un String JSON
+    final List<Map<String, dynamic>> gastosJsonList =
+    gastos.map((gasto) => gasto.toJson()).toList();
+
+    final String gastosJsonString = json.encode(gastosJsonList);
+
+    // 4. Guardar la nueva lista (sin el gasto eliminado) en SharedPreferences
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_gastosKey, gastosJsonString);
+  }
 }
