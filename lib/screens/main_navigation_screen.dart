@@ -13,41 +13,15 @@ class MainNavigationScreen extends StatefulWidget {
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
 
-class _MainNavigationScreenState extends State<MainNavigationScreen> {
+class _MainNavigationScreenState extends State<MainNavigationScreen> with AutomaticKeepAliveClientMixin {
   int _selectedIndex = 0;
 
-  // ✅ SOLO las 2 GlobalKeys originales (como en tu versión que funcionaba)
+  // ✅ SOLO las 2 GlobalKeys originales - ELIMINA LAS OTRAS
   final GlobalKey<HistoryScreenState> _historyKey = GlobalKey<HistoryScreenState>();
   final GlobalKey<HomeScreenState> _homeKey = GlobalKey<HomeScreenState>();
 
-  late List<Widget> _widgetOptions;
-
   @override
-  void initState() {
-    super.initState();
-    _initializeScreens();
-  }
-
-  void _initializeScreens() {
-    _widgetOptions = <Widget>[
-      // HOME SCREEN
-      HomeScreen(key: _homeKey),
-
-      // HISTORY SCREEN
-      HistoryScreen(
-        key: _historyKey,
-        onExpenseChanged: _globalRefresh,
-      ),
-
-      // CATEGORIES SCREEN - sin cambios
-      const CategoriesScreen(),
-
-      // ✅ SETTINGS SCREEN - CON EL CALLBACK CORRECTO
-      SettingsScreen(
-        onSettingsChanged: _globalRefresh, // ← Esto es lo que faltaba
-      ),
-    ];
-  }
+  bool get wantKeepAlive => true;
 
   void _globalRefresh() {
     _homeKey.currentState?.refreshHome();
@@ -72,9 +46,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           maxChildSize: 0.9,
           builder: (_, controller) {
             return Container(
-              decoration: const BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.only(
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(20),
                   topRight: Radius.circular(20),
                 ),
@@ -93,10 +67,27 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
+
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
-        children: _widgetOptions,
+        children: [
+          // ✅ Solo estas dos pantallas necesitan GlobalKeys
+          HomeScreen(key: _homeKey),
+          HistoryScreen(
+            key: _historyKey,
+            onExpenseChanged: _globalRefresh,
+          ),
+
+          // ❌ ESTAS NO DEBEN TENER GLOBALKEYS
+          CategoriesScreen(
+            onCategoriesChanged: _globalRefresh, // Solo el callback
+          ),
+          SettingsScreen(
+            onSettingsChanged: _globalRefresh, // Solo el callback
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _onAddExpenseTapped,
@@ -104,12 +95,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         child: const Icon(Icons.add, size: 30),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+
+      // ➡️ BottomAppBar dinámico
       bottomNavigationBar: BottomAppBar(
         shape: const CircularNotchedRectangle(),
         notchMargin: 8.0,
-        color: Colors.white,
-        elevation: 10,
-        shadowColor: Colors.black.withOpacity(0.1),
+        // El color ahora viene automáticamente del tema
         child: SizedBox(
           height: 60,
           child: Row(
@@ -138,7 +129,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   Widget _buildNavItem(IconData icon, String label, int index) {
     final isSelected = _selectedIndex == index;
-    final color = isSelected ? AppColors.accentBrown : AppColors.secondaryText;
+
+    final color = isSelected
+        ? AppColors.accentBrown
+        : Theme.of(context).iconTheme.color;
 
     return MaterialButton(
       minWidth: 40,
